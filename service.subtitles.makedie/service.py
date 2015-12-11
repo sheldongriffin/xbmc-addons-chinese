@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import os
 import sys
@@ -47,24 +47,6 @@ urllib._urlopener = AppURLopener()
 def log(module, msg):
     xbmc.log((u"%s::%s - %s" % (__scriptname__,module,msg,)).encode('utf-8'),level=xbmc.LOGDEBUG )
 
-def grapBlock(f, offset, size):
-    f.seek(offset, 0)
-    return f.read(size)
-
-def getBlockHash(f, offset):
-    return hashlib.md5(grapBlock(f, offset, 4096)).hexdigest()
-
-def genFileHash(fpath):
-    f = xbmcvfs.File(fpath)
-    ftotallen = f.size()
-    if ftotallen < 8192:
-        f.close()
-        return ""
-    offset = [4096, ftotallen/3*2, ftotallen/3, ftotallen - 8192]
-    hash = ";".join(getBlockHash(f, i) for i in offset)
-    f.close()
-    return hash
-
 def getShortNameByFileName(fpath):
     fpath = os.path.basename(fpath).rsplit(".",1)[0]
     fpath = fpath.lower()
@@ -86,21 +68,6 @@ def getShortName(fpath):
             fpath = os.path.dirname(fpath)
         else:
             return shortname
-
-def genVHash(svprev, fpath, fhash):
-    """
-    the clientkey is not avaliable now, but we can get it by reverse engineering splayer.exe
-    to get the clientkey from splayer.exe:
-    f = open("splayer","rb").read()
-    i = f.find(" %s %s%s")"""
-    global CLIENTKEY
-    if CLIENTKEY:
-        #sprintf_s( buffx, 4096, CLIENTKEY , SVP_REV_NUMBER, szTerm2, szTerm3, uniqueIDHash);
-        vhash = hashlib.md5(CLIENTKEY%(svprev, fpath, fhash)).hexdigest()
-    else:
-        #sprintf_s( buffx, 4096, "un authiority client %d %s %s %s", SVP_REV_NUMBER, fpath.encode("utf8"), fhash.encode("utf8"), uniqueIDHash);
-        vhash = hashlib.md5("un authiority client %d %s %s "%(svprev, fpath, fhash)).hexdigest()
-    return vhash
 
 def urlopen(url, svprev, formdata):
     ua = "SPlayer Build %d" % svprev
@@ -132,41 +99,6 @@ def urlopen(url, svprev, formdata):
     if resp.status != OK:
         raise Exception("HTTP response " + str(resp.status) + ": " + resp.reason)
     return resp
-
-def downloadSubs(fpath, lang):
-    global SVP_REV_NUMBER
-    global RETRY
-    pathinfo = fpath
-    if os.path.sep != "\\":
-        #*nix
-        pathinfo = "E:\\" + pathinfo.replace(os.path.sep, "\\")
-    filehash = genFileHash(fpath)
-    shortname = getShortName(fpath)
-    vhash = genVHash(SVP_REV_NUMBER, fpath.encode("utf-8"), filehash)
-    formdata = []
-    formdata.append(("pathinfo", pathinfo.encode("utf-8")))
-    formdata.append(("filehash", filehash))
-    if vhash:
-        formdata.append(("vhash", vhash))
-    formdata.append(("shortname", shortname.encode("utf-8")))
-    if lang != "chn":
-        formdata.append(("lang", lang))
-
-    for server in ["www", "svplayer", "splayer1", "splayer2", "splayer3", "splayer4", "splayer5", "splayer6", "splayer7", "splayer8", "splayer9"]:
-        for schema in ["http", "https"]:
-            theurl = schema + "://" + server + ".shooter.cn/api/subapi.php"
-            for i in range(1, RETRY+1):
-                try:
-                    log(sys._getframe().f_code.co_name, "Trying %s (retry %d)" % (theurl, i))
-                    handle = urlopen(theurl, SVP_REV_NUMBER, formdata)
-                    resp = handle.read()
-                    if len(resp) > 1024:
-                        return resp
-                    else:
-                        return ''
-                except Exception, e:
-                    log(sys._getframe().f_code.co_name, "Failed to access %s" % (theurl))
-    return ''
 
 class Package(object):
     def __init__(self, s):
@@ -211,76 +143,6 @@ class SubFile(object):
             d = zlib.decompressobj(16+zlib.MAX_WBITS)
             self.FileData = d.decompress(self.FileData)
 
-def getSubByHash(fpath, languagesearch, languageshort, languagelong):
-    subdata = downloadSubs(fpath, languagesearch)
-    if (subdata):
-        package = Package(StringIO(subdata))
-        basename = os.path.basename(fpath)
-        barename = basename.rsplit(".",1)[0]
-        id = 0
-        for sub in package.SubPackages:
-            id += 1
-            for file in sub.Files:
-                local_tmp_file = os.path.join(__temp__, ".".join([barename, languageshort, str(id), file.ExtName]))
-                try:
-                    local_file_handle = open(local_tmp_file, "wb")
-                    local_file_handle.write(file.FileData)
-                    local_file_handle.close()
-                except:
-                    log(sys._getframe().f_code.co_name, "Failed to save subtitles to '%s'" % (local_tmp_file))
-                if (file.ExtName in ["srt", "ssa", "ass", "smi", "sub"]):
-                    showname = ".".join([barename, file.ExtName])
-                    listitem = xbmcgui.ListItem(label=languagelong,
-                                                label2=showname,
-                                                iconImage="0",
-                                                thumbnailImage=languageshort
-                                                )
-                    listitem.setProperty( "sync", "true" )
-                    listitem.setProperty( "hearing_imp", "false" )
-                    url = "plugin://%s/?action=download&filename=%s" % (__scriptid__, local_tmp_file)
-                    xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=listitem,isFolder=False)
-
-def CalcFileHash(a):
-    def b(j):
-        g = ""
-        for i in range(len(j)):
-            h=ord(j[i])
-            if (h+47>=126):
-                g += chr(ord(" ") + (h+47) % 126)
-            else:
-                g += chr(h+47)
-        return g
-    def d(g):
-        h=""
-        for i in range(len(g)):
-            h+=g[len(g)-i-1]
-        return h
-    def c(j,h,g,f):
-        p = len(j)
-        return j[p-f+g-h:p-f+g] +j[p-f:p-f+g-h]+j[p-f+g:p]+j[0:p-f]
-    if len(a) >32:
-        charString =a[1:len(a)]
-        result = {
-            'o': lambda : b(c(charString, 8, 17, 27)),
-            'n': lambda : b(d(c(charString, 6, 15, 17))),
-            'm': lambda : d(c(charString, 6, 11, 17)),
-            'l': lambda : d(b(c(charString, 6, 12, 17))),
-            'k': lambda : c(charString, 14, 17, 24),
-            'j': lambda : c(b(d(charString)), 11, 17, 27),
-            'i': lambda : c(d(b(charString)), 5, 7, 24),
-            'h': lambda : c(b(charString), 12, 22, 30),
-            'g': lambda : c(d(charString), 11, 15, 21),
-            'f': lambda : c(charString, 14, 17, 24),
-            'e': lambda : c(charString, 4, 7, 22),
-            'd': lambda : d(b(charString)),
-            'c': lambda : b(d(charString)),
-            'b': lambda : d(charString),
-            'a': lambda : b(charString)
-        }[a[0]]()
-        return result
-    return a
-
-
 def getSubByTitle(title, langs):
     subtitles_list = []
     url = 'http://sub.makedie.me/sub/?searchword=%s&utm_source=xbmc&utm_medium=xbmc&utm_campaign=search' % title
@@ -314,7 +176,7 @@ def getSubByTitle(title, langs):
                     subtitles_list.append({"language_name":"", "filename":name, "id":id, "language_flag":'zh', "rating":rating})#default to chinese
             elif 'eng' in langs and '英' in match:
                 subtitles_list.append({"language_name":"English", "filename":name, "id":id, "language_flag":'en', "rating":rating})
-            
+
     if subtitles_list:
         for it in subtitles_list:
             listitem = xbmcgui.ListItem(label=it["language_name"],
@@ -324,7 +186,7 @@ def getSubByTitle(title, langs):
                                   )
             listitem.setProperty( "sync", "false" )
             listitem.setProperty( "hearing_imp", "false" )
-            url = "plugin://%s/?action=download&id=%s" % (__scriptid__, '999999'+it["id"])
+            url = "plugin://%s/?action=download&id=%s" % (__scriptid__, it["id"])
             xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=listitem,isFolder=False)
 
 def Search(item):
@@ -338,12 +200,7 @@ def Search(item):
         getSubByTitle(title, item['3let_language'])
     else:
         title = '%s %s' % (item['title'], item['year'])
-        getSubByTitle(title, item['3let_language'])#use shooter fake 
-        if __addon__.getSetting("subSourceAPI") == 'true': # use splayer api
-            if 'chi' in item['3let_language']:
-                getSubByHash(item['file_original_path'], "chn", "zh", "Chinese")
-            if 'eng' in item['3let_language']:
-                getSubByHash(item['file_original_path'], "eng", "en", "English")
+        getSubByTitle(title, item['3let_language'])#use shooter fake
 
 def ChangeFileEndcoding(filepath):
     if __addon__.getSetting("transUTF8") == "true" and os.path.splitext(filepath)[1] in [".srt", ".ssa", ".ass", ".smi"]:
@@ -383,14 +240,7 @@ def DownloadID(id):
     except: pass
 
     subtitle_list = []
-    if id.startswith('999999'):
-        url = 'http://sub.makedie.me/download/%06d/%s' %(int(id[6:]), 'XBMC.SUBTITLE')
-    else:
-        url = 'http://shooter.cn/files/file3.php?hash=duei7chy7gj59fjew73hdwh213f&fileid=%s' % (id)
-        socket = urllib.urlopen( url )
-        data = socket.read()
-        url = 'http://file0.shooter.cn%s' % (CalcFileHash(data))
-    #log(sys._getframe().f_code.co_name ,"url is %s" % (url))
+    url = 'http://sub.makedie.me/download/%06d/%s' id, 'XBMC.SUBTITLE')
     socket = urllib.urlopen( url )
     data = socket.read()
     socket.close()
