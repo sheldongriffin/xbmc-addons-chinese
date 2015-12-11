@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import os
+from os.path import basename
 import sys
 import xbmc
 import urllib
+import urllib2
 import xbmcvfs
 import xbmcaddon
 import xbmcgui
@@ -18,6 +20,7 @@ from cStringIO import StringIO
 import zlib
 import random
 from urlparse import urlparse
+from urlparse import urlsplit
 from bs4 import BeautifulSoup
 import html5lib
 
@@ -122,13 +125,7 @@ def getSubByTitle(title, langs):
     results = soup.find_all("div", attrs={"class":"subitem"})
     for it in results:
             name = it.find("a", attrs={"class":"introtitle"})['title'].encode('utf-8').strip()
-            id = re.search('/xml/sub/\d+/(\d+).xml',
-                                  it.find("a", attrs={"class":"introtitle"})['href'].encode('utf-8')
-                                  ).group(1)
-            # match = it.find(text=re.compile("调校：*".decode('utf-8')))
-            # if match:
-            #     version = match[3:].encode('utf-8').strip().replace('\n','')
-            #     if version: name = version
+            href = it.find("a", attrs={"class":"introtitle"})['href']
             subtype = re.findall("格式：\s*([^\(]+)(?:\(\?\))*".decode('utf-8'), it.ul.li.text.strip())
             if subtype and subtype[0] and subtype[0]!=u'\u4e0d\u660e':#不明
                 name = '[' + subtype[0].encode('utf-8') + '] ' + name
@@ -138,13 +135,17 @@ def getSubByTitle(title, langs):
                 match = match.encode('utf-8')
             else:
                 match = ''
+
+            xmlhref = "http://sub.makedie.me" + href
+            xmlhref = urllib.quote(xmlhref)
+
             if 'chi' in langs:
                 if '简' in match or '繁' in match or '双语' in match:
-                    subtitles_list.append({"language_name":"Chinese", "filename":name, "id":id, "language_flag":'zh', "rating":rating})
+                    subtitles_list.append({"language_name":"Chinese", "filename":name, "xmlhref": xmlhref, "language_flag":'zh', "rating":rating})
                 else:
-                    subtitles_list.append({"language_name":"", "filename":name, "id":id, "language_flag":'zh', "rating":rating})#default to chinese
+                    subtitles_list.append({"language_name":"", "filename":name, "xmlhref": xmlhref, "language_flag":'zh', "rating":rating})#default to chinese
             elif 'eng' in langs and '英' in match:
-                subtitles_list.append({"language_name":"English", "filename":name, "id":id, "language_flag":'en', "rating":rating})
+                subtitles_list.append({"language_name":"English", "filename":name, "xmlhref": xmlhref, "language_flag":'en', "rating":rating})
 
     if subtitles_list:
         for it in subtitles_list:
@@ -155,7 +156,7 @@ def getSubByTitle(title, langs):
                                   )
             listitem.setProperty( "sync", "false" )
             listitem.setProperty( "hearing_imp", "false" )
-            url = "plugin://%s/?action=download&id=%s" % (__scriptid__, it["id"])
+            url = "plugin://%s/?action=download&xmlhref=%s" % (__scriptid__, it["xmlhref"])
             xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=listitem,isFolder=False)
 
 def Search(item):
@@ -202,30 +203,36 @@ def CheckSubList(files):
             list.append(subfile)
     return list
 
-def DownloadID(id):
+def DownloadID(url):
     try: shutil.rmtree(__temp__)
     except: pass
     try: os.makedirs(__temp__)
     except: pass
 
     subtitle_list = []
-    url = 'http://sub.makedie.me/download/%06d/%s' id, 'XBMC.SUBTITLE')
+    url = urllib.unquote(url)
+    socket = urllib2.urlopen( url )
+    data = socket.read()
+    socket.close()
+
+    soup = BeautifulSoup(data)
+    href = soup.find(id="btn_download")['href']
+
+    url= ('http://sub.makedie.me%s' % href)
     socket = urllib.urlopen( url )
     data = socket.read()
     socket.close()
-    header = data[:4]
-    if header == 'Rar!':
-        zipext = ".rar"
-    else: # header == 'PK':
-        zipext = ".zip"
-    zipname = 'SUBPACK%s' % (zipext)
+
+    zipname = urllib.unquote(os.path.basename(url))
     zip = os.path.join( __temp__, zipname)
     with open(zip, "wb") as subFile:
         subFile.write(data)
     subFile.close()
     xbmc.sleep(500)
-    dirs, files = xbmcvfs.listdir(__temp__) # refresh xbmc folder cache
-    xbmc.executebuiltin(('XBMC.Extract("%s","%s")' % (zip,__temp__,)).encode('utf-8'), True)
+
+    if data[:4] == 'Rar!' or data[:2] == 'PK':
+        xbmc.executebuiltin(('XBMC.Extract("%s","%s")' % (zip,__temp__,)).encode('utf-8'), True)
+
     path = __temp__
     dirs, files = xbmcvfs.listdir(path)
     list = CheckSubList(files)
@@ -313,8 +320,8 @@ if params['action'] == 'search' or params['action'] == 'manualsearch':
     Search(item)
 
 elif params['action'] == 'download':
-    if 'id' in params:
-        subs = DownloadID(params["id"])
+    if 'xmlhref' in params:
+        subs = DownloadID(params["xmlhref"])
     else:
         subs = Download(params["filename"])
     for sub in subs:
