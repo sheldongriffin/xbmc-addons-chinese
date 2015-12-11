@@ -69,37 +69,6 @@ def getShortName(fpath):
         else:
             return shortname
 
-def urlopen(url, svprev, formdata):
-    ua = "SPlayer Build %d" % svprev
-    #prepare data
-    #generate a random boundary
-    boundary = "----------------------------" + "%x"%random.getrandbits(48)
-    data = []
-    for item in formdata:
-        data.append("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + item[0] + "\"\r\n\r\n" + item[1] + "\r\n")
-    data.append("--" + boundary + "--\r\n")
-    data = "".join(data)
-    cl = str(len(data))
-
-    r = urlparse(url)
-    h = HTTPConnection(r.hostname)
-    h.connect()
-    h.putrequest("POST", r.path, skip_host=True, skip_accept_encoding=True)
-    h.putheader("User-Agent", ua)
-    h.putheader("Host", r.hostname)
-    h.putheader("Accept", "*/*")
-    h.putheader("Content-Length", cl)
-    h.putheader("Expect", "100-continue")
-    h.putheader("Content-Type", "multipart/form-data; boundary=" + boundary)
-    h.endheaders()
-
-    h.send(data)
-
-    resp = h.getresponse()
-    if resp.status != OK:
-        raise Exception("HTTP response " + str(resp.status) + ": " + resp.reason)
-    return resp
-
 class Package(object):
     def __init__(self, s):
         self.parse(s)
