@@ -28,6 +28,5 @@ msgid "Choose subtitle file"
 msgstr ""
 
 msgctxt "#32007"
-msgid "Use Shooter Player API (may become slower)"
+msgid "Include subs with unknown language"
 msgstr ""
-

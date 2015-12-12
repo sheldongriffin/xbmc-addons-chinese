@@ -139,12 +139,16 @@ def getSubByTitle(title, langs):
             xmlhref = "http://sub.makedie.me" + href
             xmlhref = urllib.quote(xmlhref)
 
-            if '简' in match or '繁' in match or '双语' in match:
+            foundchinese = '简' in match or '繁' in match or '双语' in match
+            foundenglish = '英' in match
+
+            if 'chi' in langs and foundchinese:
                 subtitles_list.append({"language_name":"Chinese", "filename":name, "xmlhref": xmlhref, "language_flag":'zh', "rating":rating})
-            elif '英' in match:
+            elif 'eng' in langs and foundenglish:
                 subtitles_list.append({"language_name":"English", "filename":name, "xmlhref": xmlhref, "language_flag":'en', "rating":rating})
-            else:
-                subtitles_list.append({"language_name":"", "filename":name, "xmlhref": xmlhref, "language_flag":"", "rating":rating})#default to chinese
+
+            if __addon__.getSetting("includeUnknown") == "true" and not foundchinese and not foundenglish:
+                subtitles_list.append({"language_name":"", "filename":name, "xmlhref": xmlhref, "language_flag":"", "rating":rating})
 
     if subtitles_list:
         for it in subtitles_list:
