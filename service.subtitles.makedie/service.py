@@ -172,7 +172,10 @@ def Search(item):
         title = item['mansearchstr']
         getSubByTitle(title, item['3let_language'])
     else:
-        title = '%s %s' % (item['title'], item['year'])
+        if item['tvshow']:
+            title = '%s S%.2dE%.2d' % (item['tvshow'], int(item['episode']), int(item['season']))
+        else:
+            title = '%s %s' % (item['title'], item['year'])
         getSubByTitle(title, item['3let_language'])#use shooter fake
 
 def ChangeFileEndcoding(filepath):
