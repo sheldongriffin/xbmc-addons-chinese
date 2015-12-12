@@ -3,6 +3,7 @@
 import re
 import os
 import sys
+import chardet
 import xbmc
 import urllib
 import urllib2
@@ -24,6 +25,7 @@ __resource__   = xbmc.translatePath( os.path.join( __cwd__, 'resources', 'lib' )
 __temp__       = xbmc.translatePath( os.path.join( __profile__, 'temp') ).decode("utf-8")
 
 sys.path.append (__resource__)
+from langconv import *
 
 SUBHD_API  = 'http://www.subhd.com/search/%s'
 SUBHD_BASE = 'http://www.subhd.com'
@@ -34,6 +36,24 @@ def log(module, msg):
 
 def normalizeString(str):
     return str
+
+def ChangeFileEndcoding(filepath):
+    if __addon__.getSetting("transUTF8") == "true" and os.path.splitext(filepath)[1] in [".srt", ".ssa", ".ass", ".smi"]:
+        data = open(filepath, 'rb').read()
+        enc = chardet.detect(data)['encoding']
+        if enc:
+            data = data.decode(enc, 'ignore')
+            if __addon__.getSetting("transJianFan") == "1":   # translate to Simplified
+                data = Converter('zh-hans').convert(data)
+            elif __addon__.getSetting("transJianFan") == "2": # translate to Traditional
+                data = Converter('zh-hant').convert(data)
+            data = data.encode('utf-8', 'ignore')
+        try:
+            local_file_handle = open(filepath, "wb")
+            local_file_handle.write(data)
+            local_file_handle.close()
+        except:
+            log(sys._getframe().f_code.co_name, "Failed to save subtitles to '%s'" % (filename))
 
 def GetHttpData(url, data=''):
     if data:
@@ -118,7 +138,7 @@ def rmtree(path):
         rmtree(os.path.join(path, dir))
     for file in files:
         xbmcvfs.delete(os.path.join(path, file))
-    xbmcvfs.rmdir(path) 
+    xbmcvfs.rmdir(path)
 
 def Download(url,lang):
     try: rmtree(__temp__)
@@ -161,11 +181,13 @@ def Download(url,lang):
             list.append(subfile.decode('utf-8'))
     if len(list) == 1:
         subtitle_list.append(os.path.join(path, list[0]))
+        ChangeFileEndcoding(os.path.join(path, list[0]))
     else:
         sel = xbmcgui.Dialog().select('请选择压缩包中的字幕', list)
         if sel == -1:
             sel = 0
         subtitle_list.append(os.path.join(path, list[sel]))
+        ChangeFileEndcoding(os.path.join(path, list[sel]))
 
     return subtitle_list
 
