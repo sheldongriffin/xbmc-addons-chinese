@@ -130,7 +130,7 @@ def getSubByTitle(title, langs):
             if subtype and subtype[0] and subtype[0]!=u'\u4e0d\u660e':#不明
                 name = '[' + subtype[0].encode('utf-8') + '] ' + name
             rating = str(int(it.ul.img['src'].split('/')[-1].split('.')[0])/20)
-            match = it.find(text=re.compile("语言：".decode('utf-8')))
+            match = it.find('li', text=re.compile('语言.*'.decode('utf-8')))
             if match:
                 match = match.encode('utf-8')
             else:
@@ -139,13 +139,12 @@ def getSubByTitle(title, langs):
             xmlhref = "http://sub.makedie.me" + href
             xmlhref = urllib.quote(xmlhref)
 
-            if 'chi' in langs:
-                if '简' in match or '繁' in match or '双语' in match:
-                    subtitles_list.append({"language_name":"Chinese", "filename":name, "xmlhref": xmlhref, "language_flag":'zh', "rating":rating})
-                else:
-                    subtitles_list.append({"language_name":"", "filename":name, "xmlhref": xmlhref, "language_flag":'zh', "rating":rating})#default to chinese
-            elif 'eng' in langs and '英' in match:
+            if '简' in match or '繁' in match or '双语' in match:
+                subtitles_list.append({"language_name":"Chinese", "filename":name, "xmlhref": xmlhref, "language_flag":'zh', "rating":rating})
+            elif '英' in match:
                 subtitles_list.append({"language_name":"English", "filename":name, "xmlhref": xmlhref, "language_flag":'en', "rating":rating})
+            else:
+                subtitles_list.append({"language_name":"", "filename":name, "xmlhref": xmlhref, "language_flag":"", "rating":rating})#default to chinese
 
     if subtitles_list:
         for it in subtitles_list:
